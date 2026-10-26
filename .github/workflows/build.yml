@@ -83,11 +83,13 @@ jobs:
           exec /usr/bin/xcrun metal "${args[@]}"
           EOF
           chmod +x bin_override/metal
-          
-          export PATH="$(pwd)/bin_override:$PATH"
 
-          # Ensure xcodegen is available globally for project generation
-          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+          # Force PATH so python3 points to actions/setup-python's version instead of Homebrew's python@3.14
+          PYTHON_BIN_DIR=$(dirname "$(which python3)")
+          export PATH="$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$(pwd)/bin_override:$PATH"
+
+          # Re-verify and ensure dependencies are installed directly on the active python3
+          python3 -m pip install --no-binary lz4 lz4 capstone fonttools backports.zstd --break-system-packages
 
           # Run build script
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
