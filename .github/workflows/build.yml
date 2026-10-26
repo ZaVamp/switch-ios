@@ -26,8 +26,8 @@ jobs:
 
       - name: Install Python Dependencies
         run: |
-          python3 -m pip install capstone fonttools "backports.zstd; python_version < '3.14'"
-          PYLZ4_USE_SYSTEM_LZ4=0 python3 -m pip install --no-binary lz4 lz4
+          python3 -m pip install capstone fonttools "backports.zstd; python_version < '3.14'" --break-system-packages
+          PYLZ4_USE_SYSTEM_LZ4=0 python3 -m pip install --no-binary lz4 lz4 --break-system-packages
 
       - name: Set up Keys
         env:
