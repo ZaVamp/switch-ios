@@ -42,6 +42,7 @@ jobs:
         run: |
           mkdir -p ~/.switch
           echo "$PROD_KEYS" > ~/.switch/prod.keys
+          echo "$PROD_KEYS" > ~/.switch/title.keys
 
       - name: Download Game File
         run: |
