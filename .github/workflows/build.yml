@@ -97,19 +97,10 @@ jobs:
           # Re-verify and ensure dependencies are installed directly on the active python3
           python3 -m pip install --no-binary lz4 lz4 capstone fonttools backports.zstd --break-system-packages
 
-          # Run build script once to extract assets, write source trees, and generate project.yml
-          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys || true
+          # Patch the python build scripts to automatically execute xcodegen right before xcodebuild runs
+          find scripts/ -type f -name "*.py" -exec sed -i '' 's/subprocess\.run(\[.xcodebuild./xcodegen generate;\n    subprocess.run(["xcodebuild"/g' {} +
 
-          # Find where project.yml was created and run xcodegen to produce DmiOS.xcodeproj
-          BUILD_DIR=$(find "${{ github.event.inputs.game_name }}" -type d -name "*_build" | head -n 1)
-          if [ -n "$BUILD_DIR" ] && [ -f "$BUILD_DIR/ios/project.yml" ]; then
-            echo "Running xcodegen in $BUILD_DIR/ios"
-            (cd "$BUILD_DIR/ios" && xcodegen generate)
-          elif [ -f "project.yml" ]; then
-            xcodegen generate
-          fi
-
-          # Run build script again to package the compiled Xcode workspace into the final .ipa
+          # Run build script to package the IPA
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
 
       - name: Upload IPA Artifact
