@@ -97,26 +97,13 @@ jobs:
           # Re-verify and ensure dependencies are installed directly on the active python3
           python3 -m pip install --no-binary lz4 lz4 capstone fonttools backports.zstd --break-system-packages
 
-          # Run build script to set up workspace structures
-          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys || true
-
-          # Locate pkg directory, generate project, archive, and export IPA
-          TARGET_PKG_DIR=$(find . -type d -name "pkg" | grep ios | head -n 1)
-          if [ -n "$TARGET_PKG_DIR" ] && [ -f "$TARGET_PKG_DIR/project.yml" ]; then
-            echo "Entering $TARGET_PKG_DIR to generate project, build, and export IPA"
-            cd "$TARGET_PKG_DIR"
-            mkdir -p build
-            xcodegen generate
-            xcodebuild -project DmiOS.xcodeproj -scheme DmiOS -configuration Release CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO archive -archivePath build/DmiOS.xcarchive
-            xcodebuild -exportArchive -archivePath build/DmiOS.xcarchive -exportOptionsPlist exportOptions.plist -exportPath build/
-            cd -
-          fi
+          # Run the main build script end-to-end now that xcodegen and path overrides are fully set
+          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: compiled-game-ipa
-          path: |
-            */*_build/ipa/build/ios/pkg/build/*.ipa
-            **/build/*.ipa
-            *.ipa
+            name: compiled-game-ipa
+            path: |
+              **/*.ipa
+              *.ipa
