@@ -97,10 +97,10 @@ jobs:
           # Re-verify and ensure dependencies are installed directly on the active python3
           python3 -m pip install --no-binary lz4 lz4 capstone fonttools backports.zstd --break-system-packages
 
-          # Run build script to generate sources and structure
+          # Run build script to set up workspace structures
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys || true
 
-          # Locate pkg directory, generate project, compile archive, and export to IPA
+          # Locate pkg directory, generate project, archive, and export IPA
           TARGET_PKG_DIR=$(find . -type d -name "pkg" | grep ios | head -n 1)
           if [ -n "$TARGET_PKG_DIR" ] && [ -f "$TARGET_PKG_DIR/project.yml" ]; then
             echo "Entering $TARGET_PKG_DIR to generate project, build, and export IPA"
@@ -117,6 +117,6 @@ jobs:
         with:
           name: compiled-game-ipa
           path: |
-            **/*.ipa
+            */*_build/ipa/build/ios/pkg/build/*.ipa
             **/build/*.ipa
-            **/pkg/build/*.ipa
+            *.ipa
