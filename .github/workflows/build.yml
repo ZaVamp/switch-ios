@@ -1,0 +1,52 @@
+name: Build nxnative IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      nsp_url:
+        description: 'Direct Download URL for your game .nsp file'
+        required: true
+        default: ''
+      game_name:
+        description: 'Name for the game folder'
+        required: true
+        default: 'TinyThor'
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies via Brew
+        run: |
+          brew install zstd spirv-cross glslang xcodegen
+          brew install --cask dotnet-sdk
+
+      - name: Install Python Dependencies
+        run: |
+          python3 -m pip install capstone fonttools "backports.zstd; python_version < '3.14'"
+          PYLZ4_USE_SYSTEM_LZ4=0 python3 -m pip install --no-binary lz4 lz4
+
+      - name: Set up Keys
+        env:
+          PROD_KEYS: ${{ secrets.PROD_KEYS }}
+        run: |
+          mkdir -p ~/.switch
+          echo "$PROD_KEYS" > ~/.switch/prod.keys
+
+      - name: Download Game File
+        run: |
+          mkdir -p "${{ github.event.inputs.game_name }}"
+          curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/game.nsp"
+
+      - name: Build Game IPA
+        run: |
+          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-game-ipa
+          path: '**/*.ipa'
