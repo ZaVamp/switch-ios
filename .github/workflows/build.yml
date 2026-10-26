@@ -97,21 +97,18 @@ jobs:
           # Re-verify and ensure dependencies are installed directly on the active python3
           python3 -m pip install --no-binary lz4 lz4 capstone fonttools backports.zstd --break-system-packages
 
-          # Run build script once to extract files, translate shaders, and construct sources
+          # Run build script to generate sources and package structure, allowing it to stop right before compilation
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys || true
 
-          # Locate the pkg directory where project.yml resides and run xcodegen + xcodebuild manually
+          # Locate the pkg directory where project.yml lives, generate the project, and compile via xcodebuild manually
           TARGET_PKG_DIR=$(find . -type d -name "pkg" | grep ios | head -n 1)
           if [ -n "$TARGET_PKG_DIR" ] && [ -f "$TARGET_PKG_DIR/project.yml" ]; then
-            echo "Manually generating and building inside $TARGET_PKG_DIR"
+            echo "Entering $TARGET_PKG_DIR to generate project and build archive"
             cd "$TARGET_PKG_DIR"
             xcodegen generate
             xcodebuild -project DmiOS.xcodeproj -scheme DmiOS -configuration Release CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO archive -archivePath build/DmiOS.xcarchive
             xcodebuild -exportArchive -archivePath build/DmiOS.xcarchive -exportOptionsPlist exportOptions.plist -exportPath build/
             cd -
-          else
-            # Fallback re-run if directory wasn't found directly
-            python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
           fi
 
       - name: Upload IPA Artifact
