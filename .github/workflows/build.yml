@@ -90,8 +90,8 @@ jobs:
           EOF
           chmod +x bin_override/metal
 
-          # Patch build_ipa.sh so xcodebuild targets the project where xcodegen created it
-          find . -type f -name "build_ipa.sh" -exec sed -i '' 's/xcodebuild/xcodegen generate \&\& if [ -d "dm\/ios" ]; then cd dm\/ios; fi \&\& xcodebuild/g' {} +
+          # Patch build_ipa.sh so xcodebuild explicitly targets dm/ios/DmIOS.xcodeproj
+          find . -type f -name "build_ipa.sh" -exec sed -i '' 's/xcodebuild/xcodegen generate \&\& xcodebuild -project dm\/ios\/DmIOS.xcodeproj/g' {} +
 
           # Force PATH so bin_override is first, followed by python and brew paths
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
