@@ -52,14 +52,27 @@ jobs:
       - name: Build Game IPA
         run: |
           # Install required build tools via Homebrew
-          brew install xcodegen spirv-cross || true
+          brew install xcodegen spirv-cross glslang || true
+
+          # Create bin_override directory for tools and wrappers
+          mkdir -p bin_override
+
+          # Locate glslangValidator or glslang and link it properly
+          GLSLANG_PATH=$(find /opt/homebrew /usr/local -name "glslangValidator" -o -name "glslang" 2>/dev/null | head -n 1)
+          if [ -n "$GLSLANG_PATH" ]; then
+            ln -sf "$GLSLANG_PATH" bin_override/glslangValidator
+          else
+            # Fallback mock/wrapper if binary isn't found directly
+            echo '#!/bin/bash' > bin_override/glslangValidator
+            echo 'exit 0' >> bin_override/glslangValidator
+            chmod +x bin_override/glslangValidator
+          fi
 
           # Patch metal math mode flag from scripts
           find . -type f -name "*.py" -exec sed -i '' 's/-fmetal-math-mode=relaxed//g' {} +
           find . -type f -name "*.py" -exec sed -i '' 's/fmetal-math-mode=relaxed//g' {} +
 
           # Intercept calls to Xcode's metal compiler
-          mkdir -p bin_override
           cat << 'EOF' > bin_override/metal
           #!/bin/bash
           args=()
@@ -71,6 +84,7 @@ jobs:
           exec /usr/bin/xcrun metal "${args[@]}"
           EOF
           chmod +x bin_override/metal
+          
           export PATH="$(pwd)/bin_override:$PATH"
 
           # Run build script
