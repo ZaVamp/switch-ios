@@ -47,8 +47,9 @@ jobs:
 
       - name: Build Game IPA
         run: |
+          # Patch out the deprecated metal math flag if present in scripts
+          find scripts/ -type f -name "*.py" -exec sed -i '' 's/-fmetal-math-mode=relaxed//g' {} +
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
-
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
