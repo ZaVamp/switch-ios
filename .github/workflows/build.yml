@@ -62,7 +62,6 @@ jobs:
           if [ -n "$GLSLANG_PATH" ]; then
             ln -sf "$GLSLANG_PATH" bin_override/glslangValidator
           else
-            # Fallback mock/wrapper if binary isn't found directly
             echo '#!/bin/bash' > bin_override/glslangValidator
             echo 'exit 0' >> bin_override/glslangValidator
             chmod +x bin_override/glslangValidator
@@ -86,6 +85,9 @@ jobs:
           chmod +x bin_override/metal
           
           export PATH="$(pwd)/bin_override:$PATH"
+
+          # Ensure xcodegen is available globally for project generation
+          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
           # Run build script
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
