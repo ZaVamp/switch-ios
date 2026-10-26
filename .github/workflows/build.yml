@@ -51,6 +51,9 @@ jobs:
 
       - name: Build Game IPA
         run: |
+          # Install required build tools via Homebrew
+          brew install xcodegen spirv-cross || true
+
           # Patch metal math mode flag from scripts
           find . -type f -name "*.py" -exec sed -i '' 's/-fmetal-math-mode=relaxed//g' {} +
           find . -type f -name "*.py" -exec sed -i '' 's/fmetal-math-mode=relaxed//g' {} +
@@ -69,9 +72,6 @@ jobs:
           EOF
           chmod +x bin_override/metal
           export PATH="$(pwd)/bin_override:$PATH"
-
-          # Ensure xcodegen is installed for xcodebuild project generation
-          brew install xcodegen || true
 
           # Run build script
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
