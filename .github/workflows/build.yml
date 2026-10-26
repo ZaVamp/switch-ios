@@ -34,7 +34,7 @@ jobs:
 
       - name: Install Python Dependencies
         run: |
-          PYLZ4_USE_SYSTEM_LZ4=0 python3 -m pip install --no-binary lz4 lz4 capstone --break-system-packages
+          PYLZ4_USE_SYSTEM_LZ4=0 python3 -m pip install --no-binary lz4 lz4 capstone fonttools backports.zstd --break-system-packages
 
       - name: Set up Keys
         env:
