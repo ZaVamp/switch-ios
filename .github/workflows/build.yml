@@ -90,20 +90,21 @@ jobs:
           EOF
           chmod +x bin_override/metal
 
+          # Patch build_ipa.sh to run xcodegen generate whenever it is invoked
+          find . -type f -name "build_ipa.sh" -exec sed -i '' 's/xcodebuild/xcodegen generate \&\& xcodebuild/g' {} +
+
           # Force PATH so bin_override is first, followed by python and brew paths
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
           export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-          # Re-verify and ensure dependencies are installed directly on the active python3
+          # Re-verify dependencies on active python environment
           python3 -m pip install --no-binary lz4 lz4 capstone fonttools backports.zstd --break-system-packages
 
-          # Run the main build script end-to-end now that xcodegen and path overrides are fully set
+          # Run the main build script end-to-end
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-            name: compiled-game-ipa
-            path: |
-              **/*.ipa
-              *.ipa
+          name: compiled-game-ipa
+          path: '**/*.ipa'
