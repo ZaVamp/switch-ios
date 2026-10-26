@@ -100,6 +100,9 @@ jobs:
           # Run build script
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
 
+          # Fallback: if project.yml exists in build output, generate xcodeproj manually if needed
+          find . -name "project.yml" -execdir xcodegen generate \; || true
+
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
