@@ -7,6 +7,10 @@ on:
         description: 'Direct Download URL for your game .nsp file'
         required: true
         default: ''
+      nsp_filename:
+        description: 'Exact NSP filename (e.g., TinyThor [0100XXXX...].nsp)'
+        required: true
+        default: 'TinyThor.nsp'
       game_name:
         description: 'Name for the game folder'
         required: true
@@ -39,7 +43,7 @@ jobs:
       - name: Download Game File
         run: |
           mkdir -p "${{ github.event.inputs.game_name }}"
-          curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/game.nsp"
+          curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/${{ github.event.inputs.nsp_filename }}"
 
       - name: Build Game IPA
         run: |
