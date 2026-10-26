@@ -57,6 +57,12 @@ jobs:
           # Create bin_override directory for tools and wrappers
           mkdir -p bin_override
 
+          # Symlink xcodegen into bin_override so subprocesses can find it
+          XCODEGEN_PATH=$(which xcodegen || find /opt/homebrew /usr/local -name "xcodegen" 2>/dev/null | head -n 1)
+          if [ -n "$XCODEGEN_PATH" ]; then
+            ln -sf "$XCODEGEN_PATH" bin_override/xcodegen
+          fi
+
           # Locate glslangValidator or glslang and link it properly
           GLSLANG_PATH=$(find /opt/homebrew /usr/local -name "glslangValidator" -o -name "glslang" 2>/dev/null | head -n 1)
           if [ -n "$GLSLANG_PATH" ]; then
@@ -84,9 +90,9 @@ jobs:
           EOF
           chmod +x bin_override/metal
 
-          # Force PATH so python3 points to actions/setup-python's version and xcodegen is accessible
+          # Force PATH so bin_override is first, followed by python and brew paths
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
-          export PATH="$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$(pwd)/bin_override:$PATH"
+          export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
           # Re-verify and ensure dependencies are installed directly on the active python3
           python3 -m pip install --no-binary lz4 lz4 capstone fonttools backports.zstd --break-system-packages
