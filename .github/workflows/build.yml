@@ -3,18 +3,17 @@ name: Build nxnative IPA
 on:
   workflow_dispatch:
     inputs:
-      nsp_url:
-        description: 'Direct Download URL for your game .nsp file'
-        required: true
-        default: ''
-      nsp_filename:
-        description: 'Exact NSP filename (e.g., TinyThor [0100XXXX...].nsp)'
-        required: true
-        default: 'TinyThor.nsp'
       game_name:
-        description: 'Name for the game folder'
+        description: 'Game Folder/Name (e.g., TinyThor)'
         required: true
         default: 'TinyThor'
+      nsp_url:
+        description: 'Direct NSP Download URL'
+        required: true
+      nsp_filename:
+        description: 'Target NSP Filename with brackets'
+        required: true
+        default: 'Tiny Thor [010002401AE94000].nsp'
 
 jobs:
   build:
@@ -23,14 +22,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Dependencies via Brew
-        run: |
-          brew install zstd spirv-cross glslang xcodegen
-          brew install --cask dotnet-sdk
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
       - name: Install Python Dependencies
         run: |
-          python3 -m pip install capstone fonttools "backports.zstd; python_version < '3.14'" --break-system-packages
           PYLZ4_USE_SYSTEM_LZ4=0 python3 -m pip install --no-binary lz4 lz4 --break-system-packages
 
       - name: Set up Keys
@@ -44,9 +42,10 @@ jobs:
         run: |
           mkdir -p "${{ github.event.inputs.game_name }}"
           curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/${{ github.event.inputs.nsp_filename }}"
-- name: Build Game IPA
+
+      - name: Build Game IPA
         run: |
-          # Aggressively remove the unsupported metal math mode argument
+          # Patch metal math mode flag from scripts
           find . -type f -name "*.py" -exec sed -i '' 's/-fmetal-math-mode=relaxed//g' {} +
           find . -type f -name "*.py" -exec sed -i '' 's/fmetal-math-mode=relaxed//g' {} +
 
@@ -65,13 +64,12 @@ jobs:
           chmod +x bin_override/metal
           export PATH="$(pwd)/bin_override:$PATH"
 
-          # Ensure xcodegen is available to build the project file properly
+          # Ensure xcodegen is installed for xcodebuild project generation
           brew install xcodegen || true
 
           # Run build script
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
-    
-      
+
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
