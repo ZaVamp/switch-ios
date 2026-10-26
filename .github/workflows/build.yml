@@ -45,10 +45,12 @@ jobs:
           mkdir -p "${{ github.event.inputs.game_name }}"
           curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/${{ github.event.inputs.nsp_filename }}"
 
+    
       - name: Build Game IPA
         run: |
-          # Patch out the deprecated metal math flag if present in scripts
-          find scripts/ -type f -name "*.py" -exec sed -i '' 's/-fmetal-math-mode=relaxed//g' {} +
+          # Aggressively remove the unsupported metal math mode argument from all python tool scripts
+          find . -name "*.py" -exec sed -i '' 's/-fmetal-math-mode=relaxed//g' {} +
+          find . -name "*.py" -exec sed -i '' 's/fmetal-math-mode=relaxed//g' {} +
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
