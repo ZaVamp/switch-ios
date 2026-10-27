@@ -49,51 +49,39 @@ jobs:
           mkdir -p "${{ github.event.inputs.game_name }}"
           curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/${{ github.event.inputs.nsp_filename }}"
 
-      - name: Fix tool check
+      - name: Install Tools
         run: |
-          sed -i '' "s|'cd .. && xcodegen generate && cd pkg && xcodebuild -project ../DmIOS.xcodeproj'|'xcodebuild'|" scripts/build_ipa_from_nsp.py
-
-      - name: Build Game IPA
-        run: |
-          # Install required build tools via Homebrew
           brew install xcodegen spirv-cross glslang zstd || true
 
-          # Create bin_override directory for tool wrappers
-          mkdir -p bin_override
-
-          # Link xcodegen into bin_override
-          XCODEGEN_PATH=$(which xcodegen || find /opt/homebrew /usr/local -name "xcodegen" 2>/dev/null | head -n 1)
-          if [ -n "$XCODEGEN_PATH" ]; then
-            ln -sf "$XCODEGEN_PATH" bin_override/xcodegen
-          fi
-
-          # Locate glslangValidator or glslang and link it
-          GLSLANG_PATH=$(find /opt/homebrew /usr/local -name "glslangValidator" -o -name "glslang" 2>/dev/null | head -n 1)
-          if [ -n "$GLSLANG_PATH" ]; then
-            ln -sf "$GLSLANG_PATH" bin_override/glslangValidator
-          else
-            echo '#!/bin/bash' > bin_override/glslangValidator
-            echo 'exit 0' >> bin_override/glslangValidator
-            chmod +x bin_override/glslangValidator
-          fi
-
-          # Patch metal math mode flag from python scripts
+      - name: Fix Script
+        run: |
+          sed -i '' "s|'cd .. && xcodegen generate && cd pkg && xcodebuild -project ../DmIOS.xcodeproj'|'xcodebuild'|" scripts/build_ipa_from_nsp.py
           find . -type f -name "*.py" -exec sed -i '' 's/-fmetal-math-mode=relaxed//g' {} +
           find . -type f -name "*.py" -exec sed -i '' 's/fmetal-math-mode=relaxed//g' {} +
 
-          # Intercept calls to Xcode's metal compiler
-          cat << 'EOF' > bin_override/metal
-          #!/bin/bash
-          args=()
-          for arg in "$@"; do
-            if [[ "$arg" != *"-fmetal-math-mode=relaxed"* ]]; then
-              args+=("$arg")
-            fi
-          done
-          exec /usr/bin/xcrun metal "${args[@]}"
-          EOF
+      - name: Create Tool Wrappers
+        run: |
+          mkdir -p bin_override
+          ln -sf "$(which xcodegen)" bin_override/xcodegen
+          GLSLANG_PATH=$(find /opt/homebrew /usr/local -name "glslangValidator" 2>/dev/null | head -n 1)
+          if [ -n "$GLSLANG_PATH" ]; then
+            ln -sf "$GLSLANG_PATH" bin_override/glslangValidator
+          else
+            printf '%s\n' '#!/bin/bash' 'exit 0' > bin_override/glslangValidator
+          fi
+          chmod +x bin_override/glslangValidator
+          printf '%s\n' '#!/bin/bash' 'args=()' 'for arg in "$@"; do' '  if [[ "$arg" != *"-fmetal-math-mode=relaxed"* ]]; then args+=("$arg"); fi' 'done' 'exec /usr/bin/xcrun metal "${args[@]}"' > bin_override/metal
           chmod +x bin_override/metal
 
-          # Add bin_override to PATH
-          PYTHON_BIN_DIR=$(dirname "$(which python3)")
-          export PATH="$(pwd)/bin_override:
+      - name: Build Game IPA
+        run: |
+          export PATH="$(pwd)/bin_override:/opt/homebrew/bin:/usr/local/bin:$PATH"
+          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-game-ipa
+          path: |
+            **/*.ipa
+            **/*.app
