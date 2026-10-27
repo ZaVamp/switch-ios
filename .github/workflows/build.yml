@@ -30,7 +30,7 @@ jobs:
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0'
+          dotnet-version: '10.0.x'
 
       - name: Install Python Dependencies
         run: |
@@ -49,10 +49,15 @@ jobs:
           mkdir -p "${{ github.event.inputs.game_name }}"
           curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/${{ github.event.inputs.nsp_filename }}"
 
+      - name: Fix tool check
+        run: |
+          grep -rn "cd .. && xcodegen generate" . --include=*.py || true
+          sed -i '' "s|'cd .. && xcodegen generate && cd pkg && xcodebuild -project ../DmIOS.xcodeproj'|'xcodebuild'|" scripts/build_ipa_from_nsp.py
+
       - name: Build Game IPA
         run: |
           # Install required build tools via Homebrew
-          brew install xcodegen spirv-cross glslang || true
+          brew install xcodegen spirv-cross glslang zstd || true
 
           # Create bin_override directory for tool wrappers
           mkdir -p bin_override
