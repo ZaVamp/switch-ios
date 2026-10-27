@@ -54,7 +54,7 @@ jobs:
           # Install required build tools via Homebrew
           brew install xcodegen spirv-cross glslang || true
 
-          # Create bin_override directory for tool interceptors
+          # Create bin_override directory for tools
           mkdir -p bin_override
 
           # Link xcodegen into bin_override
@@ -90,29 +90,28 @@ jobs:
           EOF
           chmod +x bin_override/metal
 
-          # Create xcodebuild wrapper that generates Xcode project in parent directory if missing
-          cat << 'EOF' > bin_override/xcodebuild
-          #!/bin/bash
-          if [ ! -d "DmIOS.xcodeproj" ] && [ -f "../project.yml" ]; then
-            echo "[Wrapper] Generating Xcode project in parent directory..."
-            (cd .. && xcodegen generate)
-            exec /usr/bin/xcodebuild -project ../DmIOS.xcodeproj "$@"
-          elif [ -d "DmIOS.xcodeproj" ]; then
-            exec /usr/bin/xcodebuild "$@"
-          elif [ -d "../DmIOS.xcodeproj" ]; then
-            exec /usr/bin/xcodebuild -project ../DmIOS.xcodeproj "$@"
-          else
-            exec /usr/bin/xcodebuild "$@"
-          fi
-          EOF
-          chmod +x bin_override/xcodebuild
-
-          # Set PATH so bin_override is searched first
+          # Add bin_override to PATH
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
           export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-          # Run the main build script without masking errors
+          # Background watcher that immediately injects xcodegen and correct path into any generated build_ipa.sh
+          (
+            while true; do
+              find . -name "build_ipa.sh" -type f 2>/dev/null | while read -r f; do
+                if ! grep -q "xcodegen generate" "$f"; then
+                  sed -i '' 's/xcodebuild/cd .. \&\& xcodegen generate \&\& cd pkg \&\& xcodebuild -project ..\/DmIOS.xcodeproj/g' "$f"
+                fi
+              done
+              sleep 0.2
+            done
+          ) &
+          WATCHER_PID=$!
+
+          # Run the main build script end-to-end
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
+
+          # Kill the background watcher when done
+          kill $WATCHER_PID 2>/dev/null || true
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
