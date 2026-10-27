@@ -90,28 +90,51 @@ jobs:
           EOF
           chmod +x bin_override/metal
 
-          # Add bin_override to PATH
+          # Create a pristine xcodebuild binary wrapper that the python script can find, 
+          # which automatically handles xcodegen generation and correct relative paths.
+          cat << 'EOF' > bin_override/xcodebuild
+          #!/bin/bash
+          # If we are inside pkg/ or tools/, check parent directories for project.yml and generate if missing
+          if [ ! -d "DmIOS.xcodeproj" ] && [ ! -d "../DmIOS.xcodeproj" ] && [ -f "../project.yml" ]; then
+            (cd .. && xcodegen generate)
+          elif [ ! -d "DmIOS.xcodeproj" ] && [ ! -d "../../DmIOS.xcodeproj" ] && [ -f "../../project.yml" ]; then
+            (cd ../.. && xcodegen generate)
+          fi
+
+          # Clean incoming arguments of any conflicting -project flags
+          clean_args=()
+          skip_next=false
+          for arg in "$@"; do
+            if [ "$skip_next" = true ]; then
+              skip_next=false
+              continue
+            fi
+            if [ "$arg" = "-project" ]; then
+              skip_next=true
+              continue
+            fi
+            clean_args+=("$arg")
+          done
+
+          # Point to the correct DmIOS.xcodeproj based on current location
+          if [ -d "DmIOS.xcodeproj" ]; then
+            exec /usr/bin/xcodebuild -project DmIOS.xcodeproj "${clean_args[@]}"
+          elif [ -d "../DmIOS.xcodeproj" ]; then
+            exec /usr/bin/xcodebuild -project ../DmIOS.xcodeproj "${clean_args[@]}"
+          elif [ -d "../../DmIOS.xcodeproj" ]; then
+            exec /usr/bin/xcodebuild -project ../../DmIOS.xcodeproj "${clean_args[@]}"
+          else
+            exec /usr/bin/xcodebuild "${clean_args[@]}"
+          fi
+          EOF
+          chmod +x bin_override/xcodebuild
+
+          # Add bin_override to the front of PATH so the python script finds our custom xcodebuild tool
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
           export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-          # Background watcher that immediately injects xcodegen and correct path into any generated build_ipa.sh
-          (
-            while true; do
-              find . -name "build_ipa.sh" -type f 2>/dev/null | while read -r f; do
-                if ! grep -q "xcodegen generate" "$f"; then
-                  sed -i '' 's/xcodebuild/cd .. \&\& xcodegen generate \&\& cd pkg \&\& xcodebuild -project ..\/DmIOS.xcodeproj/g' "$f"
-                fi
-              done
-              sleep 0.2
-            done
-          ) &
-          WATCHER_PID=$!
-
           # Run the main build script end-to-end
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
-
-          # Kill the background watcher when done
-          kill $WATCHER_PID 2>/dev/null || true
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
@@ -120,3 +143,4 @@ jobs:
           path: |
             **/*.ipa
             **/*.app
+            **/TinyThor.ipa
