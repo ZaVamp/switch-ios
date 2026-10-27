@@ -90,11 +90,10 @@ jobs:
           EOF
           chmod +x bin_override/metal
 
-          # Smart wrapper for xcodebuild: finds project.yml, generates xcodeproj, and sets correct project target
+          # Filter out conflicting -project flags and insert the correct relative path
           cat << 'EOF' > bin_override/xcodebuild
           #!/bin/bash
           
-          # Find where project.yml lives and run xcodegen there
           PROJ_DIR=""
           if [ -f "project.yml" ]; then
             PROJ_DIR="."
@@ -108,17 +107,36 @@ jobs:
             (cd "$PROJ_DIR" && xcodegen generate)
           fi
 
-          # Determine the location of DmIOS.xcodeproj
-          PROJ_FLAG=()
+          # Filter arguments to remove any incoming -project and its argument value
+          clean_args=()
+          skip_next=false
+          for arg in "$@"; do
+            if [ "$skip_next" = true ]; then
+              skip_next=false
+              continue
+            fi
+            if [ "$arg" = "-project" ]; then
+              skip_next=true
+              continue
+            fi
+            clean_args+=("$arg")
+          done
+
+          # Determine correct project file path
+          PROJ_FLAG=""
           if [ -d "DmIOS.xcodeproj" ]; then
-            PROJ_FLAG=(-project DmIOS.xcodeproj)
+            PROJ_FLAG="DmIOS.xcodeproj"
           elif [ -d "../DmIOS.xcodeproj" ]; then
-            PROJ_FLAG=(-project ../DmIOS.xcodeproj)
+            PROJ_FLAG="../DmIOS.xcodeproj"
           elif [ -d "../../DmIOS.xcodeproj" ]; then
-            PROJ_FLAG=(-project ../../DmIOS.xcodeproj)
+            PROJ_FLAG="../../DmIOS.xcodeproj"
           fi
 
-          exec /usr/bin/xcodebuild "${PROJ_FLAG[@]}" "$@"
+          if [ -n "$PROJ_FLAG" ]; then
+            exec /usr/bin/xcodebuild -project "$PROJ_FLAG" "${clean_args[@]}"
+          else
+            exec /usr/bin/xcodebuild "${clean_args[@]}"
+          fi
           EOF
           chmod +x bin_override/xcodebuild
 
