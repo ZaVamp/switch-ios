@@ -51,7 +51,6 @@ jobs:
 
       - name: Fix tool check
         run: |
-          grep -rn "cd .. && xcodegen generate" . --include=*.py || true
           sed -i '' "s|'cd .. && xcodegen generate && cd pkg && xcodebuild -project ../DmIOS.xcodeproj'|'xcodebuild'|" scripts/build_ipa_from_nsp.py
 
       - name: Build Game IPA
@@ -95,25 +94,6 @@ jobs:
           EOF
           chmod +x bin_override/metal
 
-          # Pre-generate any Xcode projects from project.yml files found in the repo upfront
-          find . -name "project.yml" -not -path "*/.*" | while read -r proj; do
-            dir=$(dirname "$proj")
-            echo "Pre-generating Xcode project in $dir..."
-            (cd "$dir" && xcodegen generate)
-          done
-
           # Add bin_override to PATH
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
-          export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
-
-          # Run the main build script cleanly without script corruption
-          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
-
-      - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: compiled-game-ipa
-          path: |
-            **/*.ipa
-            **/*.app
-            **/TinyThor.ipa
+          export PATH="$(pwd)/bin_override:
