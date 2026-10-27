@@ -25,7 +25,7 @@ jobs:
       - name: Select Xcode
         run: |
           ls -d /Applications/Xcode*.app || true
-          X=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -n 1)
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)
           if [ -z "$X" ]; then X=$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1); fi
           echo "Using $X"
           sudo xcode-select -s "$X"
