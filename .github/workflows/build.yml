@@ -90,20 +90,37 @@ jobs:
           EOF
           chmod +x bin_override/metal
 
-          # Wrap xcodebuild to automatically generate project.yml in current directory if missing
+          # Smart wrapper for xcodebuild: finds project.yml, generates xcodeproj, and sets correct project target
           cat << 'EOF' > bin_override/xcodebuild
           #!/bin/bash
+          
+          # Find where project.yml lives and run xcodegen there
+          PROJ_DIR=""
           if [ -f "project.yml" ]; then
-            xcodegen generate
+            PROJ_DIR="."
           elif [ -f "../project.yml" ]; then
-            (cd .. && xcodegen generate)
+            PROJ_DIR=".."
+          elif [ -f "../../project.yml" ]; then
+            PROJ_DIR="../.."
           fi
-          exec /usr/bin/xcodebuild "$@"
+
+          if [ -n "$PROJ_DIR" ]; then
+            (cd "$PROJ_DIR" && xcodegen generate)
+          fi
+
+          # Determine the location of DmIOS.xcodeproj
+          PROJ_FLAG=()
+          if [ -d "DmIOS.xcodeproj" ]; then
+            PROJ_FLAG=(-project DmIOS.xcodeproj)
+          elif [ -d "../DmIOS.xcodeproj" ]; then
+            PROJ_FLAG=(-project ../DmIOS.xcodeproj)
+          elif [ -d "../../DmIOS.xcodeproj" ]; then
+            PROJ_FLAG=(-project ../../DmIOS.xcodeproj)
+          fi
+
+          exec /usr/bin/xcodebuild "${PROJ_FLAG[@]}" "$@"
           EOF
           chmod +x bin_override/xcodebuild
-
-          # Clean build_ipa.sh back to standard xcodebuild call
-          find . -type f -name "build_ipa.sh" -exec sed -i '' 's/cd .. && xcodegen generate && //g' {} +
 
           # Force PATH so bin_override is first, followed by python and brew paths
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
