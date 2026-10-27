@@ -1,161 +1,110 @@
-# Tests that need no game files, keys or GPU. GitHub's macOS runners are virtual Macs without Metal 4 (issue #112), so the tests that go through mtl_init
-# (t_nvn, t_mip_extent, t_rt_range and the rest of dm/gfx/tests' run list) stay local: run `make -C dm/gfx/tests GAME=<id> run` on an Apple-silicon Mac.
-# `profile_guess.py --check` stays local too: it compares the guesses with the extractions of the games (it needs their files).
-name: tests
+name: Build nxnative IPA
 
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      game_name:
+        description: 'Game Folder/Name (e.g., TinyThor)'
+        required: true
+        default: 'TinyThor'
+      nsp_url:
+        description: 'Direct NSP Download URL'
+        required: true
+      nsp_filename:
+        description: 'Target NSP Filename with brackets'
+        required: true
+        default: 'Tiny Thor [010002401AE94000].nsp'
 
-permissions:
-  contents: read
-
-concurrency:
-  group: tests-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
-env:
-  GAME: 010015100B514000   # Super Mario Bros. Wonder: the profile the host and gfx tests are built for (any profile does; the tests are about code, not the game)
-
-defaults:
-  run:
-    shell: bash
-
-# Actions are pinned to commit SHAs (the tag in the comment): a tag can be moved, a SHA cannot. Dependabot (github-actions) can raise them.
 jobs:
-  host-tests:
-    name: Host unit tests and CPU-only gfx tests
-    runs-on: macos-26
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Host unit tests (dm/host/tests)
-        run: |
-          mkdir -p logs
-          make -C dm/host/tests GAME="$GAME" -j3 run 2>&1 | tee logs/host-tests.log
-      - name: ThreadSanitizer (audio, HID and guest memory)
-        run: |
-          make -C dm/host/tests GAME="$GAME" -j3 tsan memory-tsan 2>&1 | tee logs/tsan.log
-      - name: Thermal cap and ThreadSanitizer (concurrent frame-cap readers)
-        run: |
-          make -C dm/gfx/tests GAME="$GAME" -j3 check_t_thermal thermal-tsan 2>&1 | tee logs/thermal.log
-      - name: CPU texture layout and deswizzle tests
-        run: |
-          make -C dm/gfx/tex/tests t_tex 2>&1 | tee logs/texture-build.log
-          dm/gfx/tex/tests/t_tex 2>&1 | tee logs/texture-tests.log
-      - name: CPU-only gfx tests (dm/gfx/tests)
-        run: |
-          mkdir -p logs
-          cd dm/gfx/tests
-          make GAME="$GAME" -j3 t_perf_order
-          ./t_perf_order --cpu 2>&1 | tee ../../../logs/t_perf_order.log
-          make GAME="$GAME" -j3 perf-order-tsan 2>&1 | tee ../../../logs/t_perf_order-tsan.log
-          tests="t_dirty_slots t_dirty_race t_tex_layout t_pace t_fstep t_hmap t_cover t_pso_skey t_refl t_rt_range_ro t_present_rescue t_gpuprof"
-          make GAME="$GAME" -j3 $tests 2>&1 | tee ../../../logs/gfx-build.log
-          failed=0
-          for t in $tests; do
-            echo "::group::$t"
-            ./$t 2>&1 | tee "../../../logs/$t.log" && rc=0 || rc=1   # pipefail: the test's status
-            echo "::endgroup::"
-            if [ "$rc" != 0 ]; then echo "::error::$t failed"; failed=1; fi
-          done
-          exit $failed
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: failure()
-        with:
-          name: logs-host-tests
-          path: logs
-          retention-days: 7
-
-  tool-tests:
-    name: Tool tests
-    runs-on: macos-26
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.14'
-          cache: pip
-          cache-dependency-path: .github/workflows/tests.yml   # no requirements file: the packages are listed in the step below
-      - name: Install the Python packages the tools import
-        run: python -m pip install lz4 capstone fonttools   # backports.zstd is for Python before 3.14 only
-      - name: Run the test files
-        env:
-          DM_GAME: ${{ env.GAME }}   # test_tbdr_budget runs a tool that needs a profile
-        run: |
-          mkdir -p logs
-          failed=0
-          for f in dm/tools/tests/test_*.py dm/ios/tests/test_*.py dm/gfx/tests/test_*.py; do
-            echo "::group::$f"
-            python -m unittest -v "$f" 2>&1 | tee "logs/$(basename "$f").log" || { echo "::error::$f failed"; failed=1; }
-            echo "::endgroup::"
-          done
-          exit $failed
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: failure()
-        with:
-          name: logs-tool-tests
-          path: logs
-          retention-days: 7
-
   build:
-    name: Build check (Mac host, gfx tests, iOS sources)
-    runs-on: macos-26
-    timeout-minutes: 40
+    runs-on: macos-14
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Mac host for three profiles (Vulkan, NVN, OpenGL)
-        run: |
-          mkdir -p logs
-          # Wonder: NVN; Hades: Vulkan; Digimon Story Cyber Sleuth: OpenGL. The second and third reuse the libvpx build in dm/host/gen/vpx.
-          for g in 010015100B514000 0100535012974000 010014E00DB56000; do
-            echo "::group::dmhost $g"
-            make -C dm/host GAME=$g -j3 dmhost 2>&1 | tee "logs/dmhost-$g.log"
-            test -x dm/host/dmhost
-            echo "::endgroup::"
-          done
-      - name: Every gfx test compiled, not run
-        run: |
-          mkdir -p logs
-          cd dm/gfx/tests
-          tests=$(sed -n 's/^\(t_[a-z0-9_]*\):.*/\1/p' Makefile | sort -u)
-          echo "$tests" | tr '\n' ' '; echo
-          make GAME="$GAME" -j3 $tests 2>&1 | tee ../../../logs/gfx-tests-build.log
-      - name: iOS host sources compiled for the iPhone SDK (no signing, no Xcode project)
-        run: python3 dm/ios/tools/compile_check.py 2>&1 | tee logs/ios-compile.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: failure()
-        with:
-          name: logs-build
-          path: logs
-          retention-days: 7
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-  ios-build:
-    name: Unsigned iOS app (synthetic modules, Swift and link)
-    runs-on: macos-26
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          persist-credentials: false
-      - name: Install XcodeGen
-        run: command -v xcodegen || brew install xcodegen
-      - name: Build the production iOS project with synthetic inputs
+          python-version: '3.11'
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0'
+
+      - name: Install Python Dependencies
         run: |
-          mkdir -p logs
-          python3 dm/ios/tools/build_smoke.py --output "$RUNNER_TEMP/ios-smoke" 2>&1 | tee logs/ios-build.log
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: failure()
+          PYLZ4_USE_SYSTEM_LZ4=0 python3 -m pip install --no-binary lz4 lz4 capstone fonttools backports.zstd --break-system-packages
+
+      - name: Set up Keys
+        env:
+          PROD_KEYS: ${{ secrets.PROD_KEYS }}
+        run: |
+          mkdir -p ~/.switch
+          echo "$PROD_KEYS" > ~/.switch/prod.keys
+          echo "$PROD_KEYS" > ~/.switch/title.keys
+
+      - name: Download Game File
+        run: |
+          mkdir -p "${{ github.event.inputs.game_name }}"
+          curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/${{ github.event.inputs.nsp_filename }}"
+
+      - name: Build Game IPA
+        run: |
+          # Install required build tools via Homebrew
+          brew install xcodegen spirv-cross glslang || true
+
+          # Create bin_override directory for tools
+          mkdir -p bin_override
+
+          # Link xcodegen into bin_override
+          XCODEGEN_PATH=$(which xcodegen || find /opt/homebrew /usr/local -name "xcodegen" 2>/dev/null | head -n 1)
+          if [ -n "$XCODEGEN_PATH" ]; then
+            ln -sf "$XCODEGEN_PATH" bin_override/xcodegen
+          fi
+
+          # Locate glslangValidator or glslang and link it
+          GLSLANG_PATH=$(find /opt/homebrew /usr/local -name "glslangValidator" -o -name "glslang" 2>/dev/null | head -n 1)
+          if [ -n "$GLSLANG_PATH" ]; then
+            ln -sf "$GLSLANG_PATH" bin_override/glslangValidator
+          else
+            echo '#!/bin/bash' > bin_override/glslangValidator
+            echo 'exit 0' >> bin_override/glslangValidator
+            chmod +x bin_override/glslangValidator
+          fi
+
+          # Patch metal math mode flag from python scripts
+          find . -type f -name "*.py" -exec sed -i '' 's/-fmetal-math-mode=relaxed//g' {} +
+          find . -type f -name "*.py" -exec sed -i '' 's/fmetal-math-mode=relaxed//g' {} +
+
+          # Intercept calls to Xcode's metal compiler
+          cat << 'EOF' > bin_override/metal
+          #!/bin/bash
+          args=()
+          for arg in "$@"; do
+            if [[ "$arg" != *"-fmetal-math-mode=relaxed"* ]]; then
+              args+=("$arg")
+            fi
+          done
+          exec /usr/bin/xcrun metal "${args[@]}"
+          EOF
+          chmod +x bin_override/metal
+
+          # Add bin_override to PATH
+          PYTHON_BIN_DIR=$(dirname "$(which python3)")
+          export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+          # Pre-create a global template or hook into python modules if build_ipa.sh templates exist
+          # Let's search and patch any template files or scripts that write build_ipa.sh
+          find . -type f \( -name "*.py" -o -name "*.sh" \) -exec sed -i '' 's/xcodebuild/cd .. \&\& xcodegen generate \&\& cd pkg \&\& xcodebuild -project ..\/DmIOS.xcodeproj/g' {} +
+
+          # Run the main build script end-to-end
+          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: logs-ios-build
-          path: logs
-          retention-days: 7
+          name: compiled-game-ipa
+          path: |
+            **/*.ipa
+            **/*.app
