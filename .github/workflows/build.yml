@@ -17,10 +17,20 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          X=$(ls -d /Applications/Xcode_16*.app 2>/dev/null | sort -V | tail -n 1)
+          if [ -z "$X" ]; then X=$(ls -d /Applications/Xcode_*.app | sort -V | tail -n 1); fi
+          echo "Using $X"
+          sudo xcode-select -s "$X"
+          xcodebuild -version
+          xcodebuild -downloadComponent MetalToolchain || true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -72,8 +82,6 @@ jobs:
           chmod +x bin_override/glslangValidator
           printf '%s\n' '#!/bin/bash' 'args=()' 'for arg in "$@"; do' '  if [[ "$arg" != *"-fmetal-math-mode=relaxed"* ]]; then args+=("$arg"); fi' 'done' 'exec /usr/bin/xcrun metal "${args[@]}"' > bin_override/metal
           chmod +x bin_override/metal
-          printf '%s\n' '#!/bin/bash' 'args=()' 'skip=0' 'for a in "$@"; do' '  if [ "$skip" = 1 ]; then skip=0; continue; fi' '  if [ "$a" = "-project" ]; then skip=1; continue; fi' '  args+=("$a")' 'done' 'd="$PWD"' 'for i in 1 2 3; do' '  if [ ! -d "$d/DmIOS.xcodeproj" ] && [ -f "$d/project.yml" ]; then (cd "$d" && xcodegen generate); fi' '  if [ -d "$d/DmIOS.xcodeproj" ]; then exec /usr/bin/xcodebuild -project "$d/DmIOS.xcodeproj" "${args[@]}"; fi' '  d=$(dirname "$d")' 'done' 'exec /usr/bin/xcodebuild "${args[@]}"' > bin_override/xcodebuild
-          chmod +x bin_override/xcodebuild
 
       - name: Build Game IPA
         run: |
