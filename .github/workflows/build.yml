@@ -149,9 +149,14 @@ jobs:
 
           # Kill the background monitor
           kill $MONITOR_PID 2>/dev/null || true
-
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: compiled-game-ipa
-          path: '**/*.ipa'
+          path: |
+            **/*.ipa
+            **/Payload/**/*.ipa
+            **/build/**/*.ipa
+            **/output/**/*.ipa
+          if-no-files-found: ignore
+
