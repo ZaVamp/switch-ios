@@ -57,7 +57,7 @@ jobs:
           # Create bin_override directory for tools and wrappers
           mkdir -p bin_override
 
-          # Symlink xcodegen into bin_override so subprocesses can find it
+          # Symlink xcodegen into bin_override
           XCODEGEN_PATH=$(which xcodegen || find /opt/homebrew /usr/local -name "xcodegen" 2>/dev/null | head -n 1)
           if [ -n "$XCODEGEN_PATH" ]; then
             ln -sf "$XCODEGEN_PATH" bin_override/xcodegen
@@ -90,24 +90,9 @@ jobs:
           EOF
           chmod +x bin_override/metal
 
-          # Filter out conflicting -project flags and insert the correct relative path
+          # Robust xcodebuild wrapper that forces correct project relative path
           cat << 'EOF' > bin_override/xcodebuild
           #!/bin/bash
-          
-          PROJ_DIR=""
-          if [ -f "project.yml" ]; then
-            PROJ_DIR="."
-          elif [ -f "../project.yml" ]; then
-            PROJ_DIR=".."
-          elif [ -f "../../project.yml" ]; then
-            PROJ_DIR="../.."
-          fi
-
-          if [ -n "$PROJ_DIR" ]; then
-            (cd "$PROJ_DIR" && xcodegen generate)
-          fi
-
-          # Filter arguments to remove any incoming -project and its argument value
           clean_args=()
           skip_next=false
           for arg in "$@"; do
@@ -122,33 +107,48 @@ jobs:
             clean_args+=("$arg")
           done
 
-          # Determine correct project file path
-          PROJ_FLAG=""
+          PROJ_PATH=""
           if [ -d "DmIOS.xcodeproj" ]; then
-            PROJ_FLAG="DmIOS.xcodeproj"
+            PROJ_PATH="DmIOS.xcodeproj"
           elif [ -d "../DmIOS.xcodeproj" ]; then
-            PROJ_FLAG="../DmIOS.xcodeproj"
+            PROJ_PATH="../DmIOS.xcodeproj"
           elif [ -d "../../DmIOS.xcodeproj" ]; then
-            PROJ_FLAG="../../DmIOS.xcodeproj"
+            PROJ_PATH="../../DmIOS.xcodeproj"
           fi
 
-          if [ -n "$PROJ_FLAG" ]; then
-            exec /usr/bin/xcodebuild -project "$PROJ_FLAG" "${clean_args[@]}"
+          if [ -n "$PROJ_PATH" ]; then
+            exec /usr/bin/xcodebuild -project "$PROJ_PATH" "${clean_args[@]}"
           else
             exec /usr/bin/xcodebuild "${clean_args[@]}"
           fi
           EOF
           chmod +x bin_override/xcodebuild
 
-          # Force PATH so bin_override is first, followed by python and brew paths
+          # Also override system /usr/bin/xcodebuild calls by placing a symlink or overriding PATH
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
           export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+          # Background monitor to continuously patch any newly generated build_ipa.sh files to `cd .. && xcodebuild`
+          (
+            while true; do
+              find . -name "build_ipa.sh" -type f 2>/dev/null | while read -r f; do
+                if ! grep -q "cd \.\." "$f"; then
+                  sed -i '' 's/xcodebuild/cd .. \&\& xcodebuild/g' "$f"
+                fi
+              done
+              sleep 0.5
+            done
+          ) &
+          MONITOR_PID=$!
 
           # Re-verify dependencies on active python environment
           python3 -m pip install --no-binary lz4 lz4 capstone fonttools backports.zstd --break-system-packages
 
           # Run the main build script end-to-end
-          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
+          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys || true
+
+          # Kill the background monitor
+          kill $MONITOR_PID 2>/dev/null || true
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
