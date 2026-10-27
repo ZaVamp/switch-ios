@@ -4,16 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       game_name:
-        description: 'Game Folder/Name (e.g., TinyThor)'
+        description: 'Game Folder/Name (e.g., SuperMarioOdyssey)'
         required: true
-        default: 'TinyThor'
+        default: 'SuperMarioOdyssey'
       nsp_url:
         description: 'Direct NSP Download URL'
         required: true
       nsp_filename:
         description: 'Target NSP Filename with brackets'
         required: true
-        default: 'Tiny Thor [010002401AE94000].nsp'
 
 jobs:
   build:
@@ -21,6 +20,14 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Free Disk Space
+        run: |
+          df -h /
+          xcrun simctl delete all || true
+          sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes/* || true
+          sudo rm -rf /Users/runner/Library/Android || true
+          df -h /
 
       - name: Select Xcode
         run: |
@@ -58,6 +65,8 @@ jobs:
         run: |
           mkdir -p "${{ github.event.inputs.game_name }}"
           curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/${{ github.event.inputs.nsp_filename }}"
+          ls -la "${{ github.event.inputs.game_name }}"
+          df -h /
 
       - name: Install Tools
         run: |
@@ -87,11 +96,12 @@ jobs:
         run: |
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
           export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
-          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
+          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys --no-keep-extracted
 
       - name: Show Logs On Failure
         if: failure()
         run: |
+          df -h /
           tail -n 60 "${{ github.event.inputs.game_name }}"/*_build/ipa/build/ios/pkg/build.log || true
           tail -n 40 "${{ github.event.inputs.game_name }}"/*_build/logs/build_ipa.log || true
 
@@ -101,4 +111,12 @@ jobs:
           name: compiled-game-ipa
           path: |
             **/*.ipa
-            **/*.app
+
+      - name: Upload Build Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            ${{ github.event.inputs.game_name }}/*_build/logs/
+            ${{ github.event.inputs.game_name }}/*_survey/survey.md
