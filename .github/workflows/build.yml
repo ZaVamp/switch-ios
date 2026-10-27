@@ -54,7 +54,7 @@ jobs:
           # Install required build tools via Homebrew
           brew install xcodegen spirv-cross glslang || true
 
-          # Create bin_override directory for tools
+          # Create bin_override directory for tool wrappers
           mkdir -p bin_override
 
           # Link xcodegen into bin_override
@@ -90,50 +90,18 @@ jobs:
           EOF
           chmod +x bin_override/metal
 
-          # Create a pristine xcodebuild binary wrapper that the python script can find, 
-          # which automatically handles xcodegen generation and correct relative paths.
-          cat << 'EOF' > bin_override/xcodebuild
-          #!/bin/bash
-          # If we are inside pkg/ or tools/, check parent directories for project.yml and generate if missing
-          if [ ! -d "DmIOS.xcodeproj" ] && [ ! -d "../DmIOS.xcodeproj" ] && [ -f "../project.yml" ]; then
-            (cd .. && xcodegen generate)
-          elif [ ! -d "DmIOS.xcodeproj" ] && [ ! -d "../../DmIOS.xcodeproj" ] && [ -f "../../project.yml" ]; then
-            (cd ../.. && xcodegen generate)
-          fi
-
-          # Clean incoming arguments of any conflicting -project flags
-          clean_args=()
-          skip_next=false
-          for arg in "$@"; do
-            if [ "$skip_next" = true ]; then
-              skip_next=false
-              continue
-            fi
-            if [ "$arg" = "-project" ]; then
-              skip_next=true
-              continue
-            fi
-            clean_args+=("$arg")
+          # Pre-generate any Xcode projects from project.yml files found in the repo upfront
+          find . -name "project.yml" -not -path "*/.*" | while read -r proj; do
+            dir=$(dirname "$proj")
+            echo "Pre-generating Xcode project in $dir..."
+            (cd "$dir" && xcodegen generate)
           done
 
-          # Point to the correct DmIOS.xcodeproj based on current location
-          if [ -d "DmIOS.xcodeproj" ]; then
-            exec /usr/bin/xcodebuild -project DmIOS.xcodeproj "${clean_args[@]}"
-          elif [ -d "../DmIOS.xcodeproj" ]; then
-            exec /usr/bin/xcodebuild -project ../DmIOS.xcodeproj "${clean_args[@]}"
-          elif [ -d "../../DmIOS.xcodeproj" ]; then
-            exec /usr/bin/xcodebuild -project ../../DmIOS.xcodeproj "${clean_args[@]}"
-          else
-            exec /usr/bin/xcodebuild "${clean_args[@]}"
-          fi
-          EOF
-          chmod +x bin_override/xcodebuild
-
-          # Add bin_override to the front of PATH so the python script finds our custom xcodebuild tool
+          # Add bin_override to PATH
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
           export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-          # Run the main build script end-to-end
+          # Run the main build script cleanly without script corruption
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
 
       - name: Upload IPA Artifact
