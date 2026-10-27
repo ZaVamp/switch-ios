@@ -75,7 +75,8 @@ jobs:
 
       - name: Build Game IPA
         run: |
-          export PATH="$(pwd)/bin_override:/opt/homebrew/bin:/usr/local/bin:$PATH"
+          PYTHON_BIN_DIR=$(dirname "$(which python3)")
+          export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
           python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
 
       - name: Upload IPA Artifact
