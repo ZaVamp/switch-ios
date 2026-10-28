@@ -1,18 +1,19 @@
-name: Build nxnative IPA
+name: Build Mario Odyssey nxnative Slim IPA
 
 on:
   workflow_dispatch:
     inputs:
       game_name:
-        description: 'Game Folder/Name (e.g., SuperMarioOdyssey)'
+        description: 'Game Folder/Name'
         required: true
         default: 'SuperMarioOdyssey'
       nsp_url:
-        description: 'Direct NSP Download URL'
+        description: 'Direct NSP/ROM Download URL'
         required: true
       nsp_filename:
-        description: 'Target NSP Filename with brackets'
+        description: 'Target NSP Filename with Title ID brackets'
         required: true
+        default: 'Super Mario Odyssey [0100000001DE8000].nsp'
 
 jobs:
   build:
@@ -20,14 +21,6 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Free Disk Space
-        run: |
-          df -h /
-          xcrun simctl delete all || true
-          sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes/* || true
-          sudo rm -rf /Users/runner/Library/Android || true
-          df -h /
 
       - name: Select Xcode
         run: |
@@ -65,30 +58,6 @@ jobs:
         run: |
           mkdir -p "${{ github.event.inputs.game_name }}"
           curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/${{ github.event.inputs.nsp_filename }}"
-          ls -la "${{ github.event.inputs.game_name }}"
-          df -h /
-
-      - name: Check Game File Type
-        run: |
-          cd "${{ github.event.inputs.game_name }}"
-          for f in *; do
-            size=$(stat -f%z "$f")
-            echo "FILE: $f ($size bytes)"
-            if [ "$size" -lt 1000000 ]; then
-              echo "Download failed, the file says:"
-              cat "$f"
-              exit 1
-            fi
-            a=$(head -c 4 "$f" | xxd -p)
-            b=$(dd if="$f" bs=1 skip=256 count=4 2>/dev/null | xxd -p)
-            echo "bytes at start: $a  (50465330 = NSP)"
-            echo "bytes at 0x100: $b  (48454144 = XCI)"
-            if [ "$b" = "48454144" ] && [ "${f##*.}" != "xci" ]; then
-              mv "$f" "${f%.*}.xci"
-              echo "Renamed to .xci"
-            fi
-          done
-          ls -la
 
       - name: Install Tools
         run: |
@@ -99,8 +68,6 @@ jobs:
           sed -i '' "s|'cd .. && xcodegen generate && cd pkg && xcodebuild -project ../DmIOS.xcodeproj'|'xcodebuild'|" scripts/build_ipa_from_nsp.py
           find . -type f -name "*.py" -exec sed -i '' 's/-fmetal-math-mode=relaxed//g' {} +
           find . -type f -name "*.py" -exec sed -i '' 's/fmetal-math-mode=relaxed//g' {} +
-          chmod -R +x dm/gfx/tools/dmsh_xlate_bin
-          find dm -name "*.sh" -exec chmod +x {} +
 
       - name: Create Tool Wrappers
         run: |
@@ -116,31 +83,22 @@ jobs:
           printf '%s\n' '#!/bin/bash' 'args=()' 'for arg in "$@"; do' '  if [[ "$arg" != *"-fmetal-math-mode=relaxed"* ]]; then args+=("$arg"); fi' 'done' 'exec /usr/bin/xcrun metal "${args[@]}"' > bin_override/metal
           chmod +x bin_override/metal
 
-      - name: Build Game IPA
+      - name: Build Game IPA (Slim Wrapper Only)
         run: |
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
           export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
-          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys --no-keep-extracted
+          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys --romfs separate
 
       - name: Show Logs On Failure
         if: failure()
         run: |
-          df -h /
           tail -n 60 "${{ github.event.inputs.game_name }}"/*_build/ipa/build/ios/pkg/build.log || true
           tail -n 40 "${{ github.event.inputs.game_name }}"/*_build/logs/build_ipa.log || true
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: compiled-game-ipa
+          name: mario-odyssey-slim-ipa
           path: |
             **/*.ipa
-
-      - name: Upload Build Logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: |
-            ${{ github.event.inputs.game_name }}/*_build/logs/
-            ${{ github.event.inputs.game_name }}/*_survey/survey.md
+            **/*.app
