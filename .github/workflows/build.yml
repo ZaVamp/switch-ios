@@ -67,7 +67,23 @@ jobs:
           curl -L "${{ github.event.inputs.nsp_url }}" -o "${{ github.event.inputs.game_name }}/${{ github.event.inputs.nsp_filename }}"
           ls -la "${{ github.event.inputs.game_name }}"
           df -h /
+      - name: Check Game File Type
+        run: |
+          cd "${{ github.event.inputs.game_name }}"
+          for f in *; do
+            a=$(head -c 4 "$f" | xxd -p)
+            b=$(dd if="$f" bs=1 skip=256 count=4 2>/dev/null | xxd -p)
+            echo "FILE: $f"
+            echo "bytes at start: $a  (50465330 = NSP)"
+            echo "bytes at 0x100: $b  (48454144 = XCI)"
+            if [ "$b" = "48454144" ] && [ "${f##*.}" != "xci" ]; then
+              mv "$f" "${f%.*}.xci"
+              echo "Renamed to .xci"
+            fi
+          done
+          ls -la
 
+    
       - name: Install Tools
         run: |
           brew install xcodegen spirv-cross glslang zstd || true
