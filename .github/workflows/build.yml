@@ -84,11 +84,11 @@ jobs:
           printf '%s\n' '#!/bin/bash' 'args=()' 'for arg in "$@"; do' '  if [[ "$arg" != *"-fmetal-math-mode=relaxed"* ]]; then args+=("$arg"); fi' 'done' 'exec /usr/bin/xcrun metal "${args[@]}"' > bin_override/metal
           chmod +x bin_override/metal
 
-      - name: Build Game IPA (Slim Wrapper Only)
+      - name: Build Game IPA
         run: |
           PYTHON_BIN_DIR=$(dirname "$(which python3)")
           export PATH="$(pwd)/bin_override:$PYTHON_BIN_DIR:/opt/homebrew/bin:/usr/local/bin:$PATH"
-          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys --romfs separate
+          python3 scripts/build_ipa_from_nsp.py "${{ github.event.inputs.game_name }}" -k ~/.switch/prod.keys
 
       - name: Show Logs On Failure
         if: failure()
@@ -99,7 +99,7 @@ jobs:
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mario-odyssey-slim-ipa
+          name: mario-odyssey-ipa
           path: |
             **/*.ipa
             **/*.app
